@@ -1,4 +1,43 @@
-OUTPUT_DIR = "./results"
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def _get_str(name: str, default: str | None) -> str | None:
+    return os.getenv(name, default)
+
+
+def _get_int(name: str, default: int | None) -> int | None:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return int(value)
+
+
+def _get_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return float(value)
+
+
+def _get_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _get_tuple(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+OUTPUT_DIR = _get_str("OUTPUT_DIR", "./results")
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ID2LABEL = {
