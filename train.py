@@ -167,6 +167,15 @@ def log_metrics(metrics: dict[str, float], header: str) -> None:
         logger.info("  - %s: %s", key, value)
 
 
+def log_wandb_metrics(metrics: dict[str, float], step: int) -> None:
+    if not ENABLE_WANDB:
+        return
+
+    import wandb
+
+    wandb.log(metrics, step=step)
+
+
 def write_run_summary(
     output_dir: str,
     run_name: str,
@@ -311,6 +320,7 @@ def main() -> None:
         metric_key_prefix="baseline_eval",
     )
     log_metrics(baseline_metrics, "Baseline validation metrics")
+    log_wandb_metrics(baseline_metrics, step=0)
 
     logger.info("Starting training")
     trainer.train()
@@ -321,6 +331,7 @@ def main() -> None:
         metric_key_prefix="final_eval",
     )
     log_metrics(final_eval_metrics, "Final validation metrics")
+    log_wandb_metrics(final_eval_metrics, step=trainer.state.global_step)
 
     logger.info("Running final test evaluation")
     test_metrics = trainer.evaluate(
@@ -328,6 +339,7 @@ def main() -> None:
         metric_key_prefix="test",
     )
     log_metrics(test_metrics, "Final test metrics")
+    log_wandb_metrics(test_metrics, step=trainer.state.global_step)
     write_run_summary(OUTPUT_DIR, run_name, baseline_metrics, final_eval_metrics, test_metrics)
 
     if ENABLE_WANDB:
