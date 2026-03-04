@@ -38,6 +38,22 @@ Current task setup:
 
 I was interested in seeing how fine-tuning with LoRA would compare to the full fine-tuning setup used in the original paper.
 
+## Evaluation Protocol
+
+The train / validation / test splits are loaded separately from the Hugging Face Corr2Cause dataset:
+- train is used for gradient updates
+- validation is used for the pre-training baseline and for model selection during training
+- test is used for reporting after training
+
+For the current Hugging Face split, the label distribution is:
+- train: `0 -> 167,686`, `1 -> 38,048`
+- validation: `0 -> 937`, `1 -> 139`
+- test: `0 -> 982`, `1 -> 180`
+
+The main reported metric in this repo is standard binary F1 on label `1`, not macro F1.
+
+For sweep runs, the 10k train subset is created by shuffling the original train split with a fixed seed and then selecting the first `10,000` examples. That keeps the subset inside the training distribution rather than mixing in validation or test data.
+
 ## Quick Setup
 
 ### Local
@@ -196,6 +212,17 @@ Still, it is useful to compare against the paper's reported ranges:
 | Paper: GPT-4 off-the-shelf | `0.2908` |
 | Paper: best off-the-shelf (BART MNLI) | `0.3338` |
 | Paper: best full fine-tune (RoBERTa-Large MNLI) | `0.9474` |
+
+### Important Caveat On Test Metrics
+
+The sweep logs test metrics for visibility, but the winner is chosen by validation F1 and validation loss, not by test.
+
+That means the cleanest final claim should come from:
+1. choosing the winning hyperparameters from the sweep using validation only
+2. rerunning that winning config once
+3. evaluating on the test split once at the end
+
+So the test numbers in the 10k sweep should be treated as encouraging but still provisional.
 
 ## Config
 
