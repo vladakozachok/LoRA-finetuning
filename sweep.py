@@ -81,7 +81,7 @@ def run_experiment(name: str, overrides: dict[str, str], sweep_id: str) -> dict:
     seed = env["SEED"]
     run_name = build_run_name(name, seed, sweep_id)
     env["WANDB_RUN_NAME"] = run_name
-    env["OUTPUT_DIR"] = f"./results/{run_name}"
+    env["OUTPUT_DIR"] = f"./results/{sweep_id}/{run_name}"
 
     print(f"\n=== Running {run_name} ===", flush=True)
     subprocess.run([sys.executable, "train.py"], check=True, env=env)
@@ -127,7 +127,7 @@ def write_sweep_summary(results: list[dict], winner: dict, sweep_id: str) -> Non
         "experiments": results,
         "winner": winner,
     }
-    output_path = Path(f"./results/sweep_summary-{sweep_id}.json")
+    output_path = Path(f"./results/{sweep_id}/sweep_summary.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(output, indent=2, sort_keys=True))
     print(f"\nSaved sweep summary to {output_path}", flush=True)
