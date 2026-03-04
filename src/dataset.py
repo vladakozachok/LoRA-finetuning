@@ -35,5 +35,13 @@ def map_dataset(
     )
 
 
+def select_subset(dataset: Dataset, size: int | None, seed: int) -> Dataset:
+    if size is None:
+        return dataset
+
+    subset_size = min(size, len(dataset))
+    return dataset.shuffle(seed=seed).select(range(subset_size))
+
+
 def set_torch_format(dataset: Dataset) -> Dataset:
     return dataset.with_format("torch", columns=["input_ids", "attention_mask", "labels"])

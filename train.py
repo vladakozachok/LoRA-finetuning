@@ -1,6 +1,8 @@
+import json
 import logging
 import os
 from importlib.util import find_spec
+from pathlib import Path
 
 from transformers import (
     AutoModelForSequenceClassification,
@@ -30,7 +32,11 @@ from config import (
     RANK,
     SEED,
     TARGET_MODULES,
+    TEST_SUBSET_SIZE,
     TRAIN_BATCH_SIZE,
+    TRAIN_SUBSET_SIZE,
+    VALIDATION_SUBSET_SIZE,
+    WANDB_ENTITY,
     WANDB_LOG_MODEL,
     WANDB_METRICS_TO_TRACK,
     WANDB_PROJECT,
@@ -39,7 +45,7 @@ from config import (
     WARMUP_RATIO,
     WEIGHT_DECAY,
 )
-from src.dataset import load_corr2cause_data, map_dataset, set_torch_format
+from src.dataset import load_corr2cause_data, map_dataset, select_subset, set_torch_format
 from src.modelling.inject_lora import (
     get_replaced_modules,
     get_trainable_parameter_count,
@@ -50,6 +56,14 @@ from src.metrics import compute_metrics
 from src.wandb_callback import WandbMetricsCallback
 
 logger = get_logger(__name__)
+
+
+def build_run_name() -> str:
+    if WANDB_RUN_NAME:
+        return WANDB_RUN_NAME
+
+    train_size = "full" if TRAIN_SUBSET_SIZE is None else f"{TRAIN_SUBSET_SIZE // 1000}k"
+    return f"qwen25-r{RANK}-lr{LEARNING_RATE:g}-{train_size}"
 
 
 def log_model_sanity_checks(model) -> None:
@@ -75,8 +89,10 @@ def log_model_sanity_checks(model) -> None:
 
 
 def configure_wandb() -> tuple[list[str], str | None, list[WandbMetricsCallback]]:
+    run_name = build_run_name()
+
     if not ENABLE_WANDB:
-        return [], None, []
+        return [], run_name, []
 
     if find_spec("wandb") is None:
         raise ImportError(
@@ -91,13 +107,17 @@ def configure_wandb() -> tuple[list[str], str | None, list[WandbMetricsCallback]
 
     wandb.init(
         project=WANDB_PROJECT,
-        name=WANDB_RUN_NAME,
+        entity=WANDB_ENTITY,
+        name=run_name,
         config={
             "model_name": MODEL_NAME,
             "rank": RANK,
             "alpha": ALPHA,
             "lora_dropout": LORA_DROPOUT,
             "target_modules": list(TARGET_MODULES),
+            "train_subset_size": TRAIN_SUBSET_SIZE,
+            "validation_subset_size": VALIDATION_SUBSET_SIZE,
+            "test_subset_size": TEST_SUBSET_SIZE,
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
             "warmup_ratio": WARMUP_RATIO,
@@ -117,6 +137,9 @@ def configure_wandb() -> tuple[list[str], str | None, list[WandbMetricsCallback]
     wandb.define_metric("eval_loss", summary="min")
     wandb.define_metric("eval_accuracy", summary="max")
     wandb.define_metric("eval_f1", summary="max")
+    wandb.define_metric("final_eval_loss", summary="min")
+    wandb.define_metric("final_eval_accuracy", summary="max")
+    wandb.define_metric("final_eval_f1", summary="max")
     wandb.define_metric("test_loss", summary="min")
     wandb.define_metric("test_accuracy", summary="max")
     wandb.define_metric("test_f1", summary="max")
@@ -125,11 +148,11 @@ def configure_wandb() -> tuple[list[str], str | None, list[WandbMetricsCallback]
     logger.info("W&B metrics to track: %s", ", ".join(WANDB_METRICS_TO_TRACK))
     return (
         [],
-        WANDB_RUN_NAME,
+        run_name,
         [
             WandbMetricsCallback(
                 metrics=WANDB_METRICS_TO_TRACK,
-                run_name=WANDB_RUN_NAME,
+                run_name=run_name,
                 log_model=WANDB_LOG_MODEL,
             )
         ],
@@ -142,9 +165,50 @@ def log_metrics(metrics: dict[str, float], header: str) -> None:
         logger.info("  - %s: %s", key, value)
 
 
+def write_run_summary(
+    output_dir: str,
+    run_name: str,
+    baseline_metrics: dict[str, float],
+    final_eval_metrics: dict[str, float],
+    test_metrics: dict[str, float],
+) -> None:
+    summary = {
+        "run_name": run_name,
+        "config": {
+            "model_name": MODEL_NAME,
+            "train_subset_size": TRAIN_SUBSET_SIZE,
+            "validation_subset_size": VALIDATION_SUBSET_SIZE,
+            "test_subset_size": TEST_SUBSET_SIZE,
+            "rank": RANK,
+            "alpha": ALPHA,
+            "lora_dropout": LORA_DROPOUT,
+            "target_modules": list(TARGET_MODULES),
+            "learning_rate": LEARNING_RATE,
+            "weight_decay": WEIGHT_DECAY,
+            "warmup_ratio": WARMUP_RATIO,
+            "lr_scheduler_type": LR_SCHEDULER_TYPE,
+            "max_grad_norm": MAX_GRAD_NORM,
+            "num_epochs": NUM_EPOCHS,
+            "train_batch_size": TRAIN_BATCH_SIZE,
+            "eval_batch_size": EVAL_BATCH_SIZE,
+            "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
+            "max_length": MAX_LENGTH,
+        },
+        "baseline_eval": baseline_metrics,
+        "final_eval": final_eval_metrics,
+        "test": test_metrics,
+    }
+
+    summary_path = Path(output_dir) / "run_summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
+    logger.info("Saved run summary to %s", summary_path)
+
+
 def main() -> None:
     configure_logging(logging.INFO)
     report_to, run_name, trainer_callbacks = configure_wandb()
+    logger.info("Run name: %s", run_name)
     logger.info("Model: %s", MODEL_NAME)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -172,6 +236,10 @@ def main() -> None:
     raw_train_dataset = load_corr2cause_data(split="train")
     raw_validation_dataset = load_corr2cause_data(split="validation")
     raw_test_dataset = load_corr2cause_data(split="test")
+
+    raw_train_dataset = select_subset(raw_train_dataset, TRAIN_SUBSET_SIZE, SEED)
+    raw_validation_dataset = select_subset(raw_validation_dataset, VALIDATION_SUBSET_SIZE, SEED)
+    raw_test_dataset = select_subset(raw_test_dataset, TEST_SUBSET_SIZE, SEED)
 
     logger.info("Raw train columns: %s", raw_train_dataset.column_names)
     logger.info("Raw validation columns: %s", raw_validation_dataset.column_names)
@@ -242,12 +310,20 @@ def main() -> None:
     logger.info("Starting training")
     trainer.train()
 
+    logger.info("Running final validation evaluation")
+    final_eval_metrics = trainer.evaluate(
+        eval_dataset=validation_dataset,
+        metric_key_prefix="final_eval",
+    )
+    log_metrics(final_eval_metrics, "Final validation metrics")
+
     logger.info("Running final test evaluation")
     test_metrics = trainer.evaluate(
         eval_dataset=test_dataset,
         metric_key_prefix="test",
     )
     log_metrics(test_metrics, "Final test metrics")
+    write_run_summary(OUTPUT_DIR, run_name, baseline_metrics, final_eval_metrics, test_metrics)
 
     if ENABLE_WANDB:
         import wandb
