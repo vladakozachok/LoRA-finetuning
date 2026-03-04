@@ -142,7 +142,6 @@ What changed across runs:
 - Fine-tuning worked clearly on a small subset.
   - baseline validation F1: `0.2288`
   - best validation F1 after training: `0.6833`
-  - best test F1: `0.7438`
 - `rank=8` beat `rank=4` at both learning rates.
 - `1e-4` beat `2e-4` at both ranks.
 - `dropout=0.05` was a reasonable default to keep; it was not the main lever compared with rank and learning rate.
@@ -160,9 +159,6 @@ What changed across runs:
   - `final_eval_accuracy=0.8941`
   - `final_eval_f1=0.6833`
   - `final_eval_loss=0.2325`
-  - `test_accuracy=0.9028`
-  - `test_f1=0.7438`
-  - `test_loss=0.2147`
 
 ### F1 Comparison
 
@@ -170,7 +166,6 @@ What changed across runs:
 | --- | --- |
 | Baseline validation | `0.2288` |
 | Best validation after training | `0.6833` |
-| Best test after training | `0.7438` |
 
 ### Sweep Comparison
 
@@ -184,13 +179,13 @@ What changed across runs:
 
 ### Sweep Table
 
-| Run | Rank | LR | Dropout | Final Val F1 | Test F1 |
-| --- | --- | --- | --- | --- | --- |
-| `r4-lr2e4` | 4 | `2e-4` | `0.05` | `0.5762` | `0.6652` |
-| `r8-lr2e4` | 8 | `2e-4` | `0.05` | `0.6568` | `0.7012` |
-| `r4-lr1e4` | 4 | `1e-4` | `0.05` | `0.5951` | `0.6983` |
-| `r8-lr1e4` | 8 | `1e-4` | `0.05` | `0.6833` | `0.7438` |
-| `r4-lr2e4-d0` | 4 | `2e-4` | `0.0` | `0.5799` | `0.6773` |
+| Run | Rank | LR | Dropout | Final Val F1 |
+| --- | --- | --- | --- | --- |
+| `r4-lr2e4` | 4 | `2e-4` | `0.05` | `0.5762` |
+| `r8-lr2e4` | 8 | `2e-4` | `0.05` | `0.6568` |
+| `r4-lr1e4` | 4 | `1e-4` | `0.05` | `0.5951` |
+| `r8-lr1e4` | 8 | `1e-4` | `0.05` | `0.6833` |
+| `r4-lr2e4-d0` | 4 | `2e-4` | `0.0` | `0.5799` |
 
 ### Comparison To Corr2Cause Paper
 
@@ -206,7 +201,6 @@ Still, it is useful to compare against the paper's reported ranges:
 | --- | --- |
 | This repo: baseline validation | `0.2288` |
 | This repo: best 10k validation | `0.6833` |
-| This repo: best 10k test | `0.7438` |
 | Paper: RoBERTa MNLI off-the-shelf | `0.2279` |
 | Paper: LLaMA-7B off-the-shelf | `0.2681` |
 | Paper: GPT-4 off-the-shelf | `0.2908` |
@@ -321,4 +315,3 @@ That run should answer a more important question than the 10k sweep alone:
 - how close can LoRA get to the Corr2Cause results reported for full fine-tuning?
 - try on LLama model for a better comparison to the original paper.
 - examine how the adapted model performs in out-of-distribution settings
-
