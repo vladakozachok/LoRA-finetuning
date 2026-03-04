@@ -10,6 +10,7 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
+    set_seed,
 )
 
 from config import (
@@ -111,6 +112,7 @@ def configure_wandb() -> tuple[list[str], str | None, list[WandbMetricsCallback]
         name=run_name,
         config={
             "model_name": MODEL_NAME,
+            "seed": SEED,
             "rank": RANK,
             "alpha": ALPHA,
             "lora_dropout": LORA_DROPOUT,
@@ -176,6 +178,7 @@ def write_run_summary(
         "run_name": run_name,
         "config": {
             "model_name": MODEL_NAME,
+            "seed": SEED,
             "train_subset_size": TRAIN_SUBSET_SIZE,
             "validation_subset_size": VALIDATION_SUBSET_SIZE,
             "test_subset_size": TEST_SUBSET_SIZE,
@@ -207,9 +210,11 @@ def write_run_summary(
 
 def main() -> None:
     configure_logging(logging.INFO)
+    set_seed(SEED)
     report_to, run_name, trainer_callbacks = configure_wandb()
     logger.info("Run name: %s", run_name)
     logger.info("Model: %s", MODEL_NAME)
+    logger.info("Seed: %s", SEED)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     if tokenizer.pad_token is None:

@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 BASE_ENV = {
@@ -21,6 +22,7 @@ BASE_ENV = {
     "LORA_DROPOUT": "0.05",
     "TARGET_MODULES": "q_proj,v_proj",
     "WANDB_LOG_MODEL": "false",
+    "SEED": "42",
 }
 
 EXPERIMENTS = [
@@ -68,14 +70,20 @@ EXPERIMENTS = [
 ]
 
 
-def run_experiment(name: str, overrides: dict[str, str]) -> dict:
+def build_run_name(base_name: str, seed: str, sweep_id: str) -> str:
+    return f"{base_name}-seed{seed}-{sweep_id}"
+
+
+def run_experiment(name: str, overrides: dict[str, str], sweep_id: str) -> dict:
     env = os.environ.copy()
     env.update(BASE_ENV)
     env.update(overrides)
-    env["WANDB_RUN_NAME"] = name
-    env["OUTPUT_DIR"] = f"./results/{name}"
+    seed = env["SEED"]
+    run_name = build_run_name(name, seed, sweep_id)
+    env["WANDB_RUN_NAME"] = run_name
+    env["OUTPUT_DIR"] = f"./results/{run_name}"
 
-    print(f"\n=== Running {name} ===", flush=True)
+    print(f"\n=== Running {run_name} ===", flush=True)
     subprocess.run([sys.executable, "train.py"], check=True, env=env)
 
     summary_path = Path(env["OUTPUT_DIR"]) / "run_summary.json"
@@ -113,25 +121,27 @@ def pick_winner(results: list[dict]) -> dict:
     return best
 
 
-def write_sweep_summary(results: list[dict], winner: dict) -> None:
+def write_sweep_summary(results: list[dict], winner: dict, sweep_id: str) -> None:
     output = {
+        "sweep_id": sweep_id,
         "experiments": results,
         "winner": winner,
     }
-    output_path = Path("./results/sweep_summary.json")
+    output_path = Path(f"./results/sweep_summary-{sweep_id}.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(output, indent=2, sort_keys=True))
     print(f"\nSaved sweep summary to {output_path}", flush=True)
 
 
 def main() -> None:
+    sweep_id = datetime.now().strftime("sweep%Y%m%d-%H%M%S-%f")
     results = []
     for experiment in EXPERIMENTS:
-        summary = run_experiment(experiment["name"], experiment["overrides"])
+        summary = run_experiment(experiment["name"], experiment["overrides"], sweep_id)
         results.append(summary)
 
     winner = pick_winner(results)
-    write_sweep_summary(results, winner)
+    write_sweep_summary(results, winner, sweep_id)
 
 
 if __name__ == "__main__":
