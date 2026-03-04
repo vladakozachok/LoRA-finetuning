@@ -292,6 +292,6 @@ The next useful experiment is a full-data run using the best sweep config:
 
 That run should answer a more important question than the 10k sweep alone:
 - how close can LoRA get to the Corr2Cause results reported for full fine-tuning?
-- try on LLama model for a better comparison to the original paper. 
+- try on LLama model for a better comparison to the original paper.
+- examine how the adapted model performs in out-of-distribution settings
 
-The goal of the next stage is to document whether, on this task, a lightweight LoRA adaptation on Qwen is competitive with a much heavier full fine-tuning setup.
